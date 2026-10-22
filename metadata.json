@@ -1,0 +1,6 @@
+{
+  "name": "중화고등학교 생태지도",
+  "description": "우리 학교의 생명을 발견하고, 기록하고, 함께 완성하는 생태지도",
+  "requestFramePermissions": ["geolocation"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
