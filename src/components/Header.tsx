@@ -1,5 +1,14 @@
 import React from 'react';
-import { Leaf, Plus, Database, RefreshCw, GraduationCap, ShieldCheck } from 'lucide-react';
+import {
+  Leaf,
+  Plus,
+  Database,
+  RefreshCw,
+  GraduationCap,
+  ShieldCheck,
+  HelpCircle,
+  History,
+} from 'lucide-react';
 import { isTeacherMode } from '../services/authService';
 
 interface HeaderProps {
@@ -8,6 +17,8 @@ interface HeaderProps {
   onOpenAddModal: () => void;
   onOpenDevModal: () => void;
   onOpenTeacherModal: () => void;
+  onOpenHelpModal: () => void;
+  onOpenChangelogModal: () => void;
   onRefresh: () => void;
   isLoading: boolean;
 }
@@ -18,6 +29,8 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAddModal,
   onOpenDevModal,
   onOpenTeacherModal,
+  onOpenHelpModal,
+  onOpenChangelogModal,
   onRefresh,
   isLoading,
 }) => {
@@ -56,6 +69,7 @@ export const Header: React.FC<HeaderProps> = ({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-between md:justify-end">
+            {/* 1. 새로고침 버튼 */}
             <button
               onClick={onRefresh}
               disabled={isLoading}
@@ -65,7 +79,26 @@ export const Header: React.FC<HeaderProps> = ({
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-600' : ''}`} />
             </button>
 
-            {/* 교사 모드 버튼 */}
+            {/* 2. 새로고침 버튼 바로 옆 물음표 학생 도움말 아이콘 */}
+            <button
+              onClick={onOpenHelpModal}
+              title="학생 이용 안내 (필수 가이드)"
+              className="p-2 text-emerald-700 hover:text-emerald-800 bg-emerald-50 hover:bg-emerald-100/80 rounded-xl transition-colors border border-emerald-200 cursor-pointer"
+            >
+              <HelpCircle className="w-4 h-4" />
+            </button>
+
+            {/* 3. 버전별 업데이트 내역 확인 아이콘 버튼 */}
+            <button
+              onClick={onOpenChangelogModal}
+              title="버전별 업데이트 내역 보기"
+              className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-stone-900 border border-stone-200 transition-colors cursor-pointer"
+            >
+              <History className="w-3.5 h-3.5 text-stone-500" />
+              <span>v1.3.0</span>
+            </button>
+
+            {/* 4. 교사 모드 버튼 */}
             <button
               onClick={onOpenTeacherModal}
               className={`inline-flex items-center gap-1.5 px-3 py-2 text-xs font-bold rounded-xl border transition-all cursor-pointer ${
@@ -78,6 +111,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span>{isTeacher ? '교사 모드 중' : '교사 로그인'}</span>
             </button>
 
+            {/* 5. 테스트 데이터 관리 버튼 */}
             <button
               onClick={onOpenDevModal}
               className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-xl text-stone-600 bg-stone-100 hover:bg-stone-200 border border-stone-200 transition-colors cursor-pointer"
@@ -87,6 +121,7 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="hidden sm:inline">테스트 데이터</span>
             </button>
 
+            {/* 6. 관찰 기록 추가 버튼 */}
             <button
               onClick={onOpenAddModal}
               className="inline-flex items-center gap-1.5 px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md shadow-emerald-600/25 transition-all hover:shadow-lg active:scale-98 cursor-pointer"

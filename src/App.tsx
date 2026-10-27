@@ -17,6 +17,8 @@ import { ObservationDetail } from './components/ObservationDetail';
 import { ObservationForm } from './components/ObservationForm';
 import { DevToolsModal } from './components/DevToolsModal';
 import { TeacherAuthModal } from './components/TeacherAuthModal';
+import { StudentGuideModal } from './components/StudentGuideModal';
+import { ChangelogModal } from './components/ChangelogModal';
 import { Map, ListFilter, Plus } from 'lucide-react';
 
 export default function App() {
@@ -41,6 +43,8 @@ export default function App() {
   const [clickedMapCoords, setClickedMapCoords] = React.useState<Coordinates | null>(null);
   const [isDevModalOpen, setIsDevModalOpen] = React.useState(false);
   const [isTeacherModalOpen, setIsTeacherModalOpen] = React.useState(false);
+  const [isHelpModalOpen, setIsHelpModalOpen] = React.useState(false);
+  const [isChangelogModalOpen, setIsChangelogModalOpen] = React.useState(false);
 
   // Mobile View Toggle: 'map' or 'list'
   const [mobileTab, setMobileTab] = React.useState<'map' | 'list'>('map');
@@ -163,6 +167,8 @@ export default function App() {
         }}
         onOpenDevModal={() => setIsDevModalOpen(true)}
         onOpenTeacherModal={() => setIsTeacherModalOpen(true)}
+        onOpenHelpModal={() => setIsHelpModalOpen(true)}
+        onOpenChangelogModal={() => setIsChangelogModalOpen(true)}
         onRefresh={loadData}
         isLoading={isLoading}
       />
@@ -304,6 +310,18 @@ export default function App() {
         isOpen={isTeacherModalOpen}
         onClose={() => setIsTeacherModalOpen(false)}
         onAuthChanged={loadData}
+      />
+
+      {/* Student Guide Help Modal */}
+      <StudentGuideModal
+        isOpen={isHelpModalOpen}
+        onClose={() => setIsHelpModalOpen(false)}
+      />
+
+      {/* Version Changelog History Modal */}
+      <ChangelogModal
+        isOpen={isChangelogModalOpen}
+        onClose={() => setIsChangelogModalOpen(false)}
       />
     </div>
   );
