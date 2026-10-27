@@ -29,17 +29,29 @@ export const ObservationCard: React.FC<ObservationCardProps> = ({
     >
       <div className="flex p-3 sm:p-3.5 gap-3.5">
         {/* Photo Thumbnail */}
-        <div className="relative w-24 h-24 sm:w-26 sm:h-26 rounded-xl overflow-hidden bg-stone-100 shrink-0">
-          <img
-            src={observation.imageUrl}
-            alt={observation.speciesName}
-            className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
-            loading="lazy"
-            onError={e => {
-              (e.target as HTMLImageElement).src =
-                'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=300&q=80';
-            }}
-          />
+        <div className="relative w-24 h-24 sm:w-26 sm:h-26 rounded-xl overflow-hidden bg-stone-100 shrink-0 flex items-center justify-center border border-stone-200/60">
+          {observation.imageUrl ? (
+            <img
+              src={observation.imageUrl}
+              alt={observation.speciesName}
+              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
+              loading="lazy"
+              onError={e => {
+                (e.target as HTMLImageElement).src =
+                  'https://images.unsplash.com/photo-1518531933037-91b2f5f229cc?auto=format&fit=crop&w=300&q=80';
+              }}
+            />
+          ) : (
+            <div className="w-full h-full flex flex-col items-center justify-center bg-stone-50 text-stone-400 p-2 text-center">
+              <span
+                className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs mb-1 shadow-2xs"
+                style={{ backgroundColor: category.pinBg }}
+              >
+                ●
+              </span>
+              <span className="text-[10px] font-medium text-stone-400">사진 없음</span>
+            </div>
+          )}
           {/* Class Tag Overlay on Image */}
           <span className="absolute top-1.5 left-1.5 px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-stone-900/85 backdrop-blur-xs text-white">
             {classLabel}

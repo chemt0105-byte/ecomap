@@ -126,14 +126,24 @@ export const ObservationDetail: React.FC<ObservationDetailProps> = ({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
-          {/* Main Photo */}
-          <div className="relative rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 max-h-80 flex items-center justify-center">
-            <img
-              src={observation.imageUrl}
-              alt={observation.speciesName}
-              className="w-full h-full object-contain max-h-80"
-            />
-          </div>
+          {/* Main Photo (if present) */}
+          {observation.imageUrl ? (
+            <div className="relative rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 max-h-80 flex items-center justify-center">
+              <img
+                src={observation.imageUrl}
+                alt={observation.speciesName}
+                className="w-full h-full object-contain max-h-80"
+              />
+            </div>
+          ) : (
+            <div className="p-5 rounded-2xl bg-stone-50 border border-dashed border-stone-300 flex items-center justify-center gap-2.5 text-stone-500 text-xs font-medium">
+              <span
+                className="w-2.5 h-2.5 rounded-full"
+                style={{ backgroundColor: category.pinBg }}
+              />
+              <span>사진 없이 등록된 생태 관찰 기록입니다.</span>
+            </div>
+          )}
 
           {/* Title */}
           <div>

@@ -3,7 +3,7 @@ import { CategoryType, Coordinates, Observation } from '../types/observation';
 import { CATEGORIES, DEFAULT_CLASSES, JUNGHWA_HIGH_SCHOOL } from '../config/mapConfig';
 import { compressAndEncodeImage } from '../services/imageService';
 import { getDeviceId } from '../services/authService';
-import { X, Camera, Upload, AlertCircle, Lock, ShieldCheck } from 'lucide-react';
+import { X, Camera, Image as ImageIcon, AlertCircle, Lock, Upload } from 'lucide-react';
 
 interface ObservationFormProps {
   initialCoordinates?: Coordinates | null;
@@ -18,7 +18,7 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
   onClose,
   onSubmit,
 }) => {
-  // 1. 사진 (Photo)
+  // 1. 사진 (Photo, optional)
   const [imagePreview, setImagePreview] = useState<string>('');
   // 2. 분류 (Category)
   const [category, setCategory] = useState<CategoryType>('plant');
@@ -37,7 +37,10 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Two separate inputs: one for direct camera, one for gallery/file picker
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
 
   // Use clicked coordinates or default school center
   const coordinates: Coordinates = initialCoordinates || JUNGHWA_HIGH_SCHOOL.coordinates;
@@ -53,16 +56,16 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
       setErrorMessage('');
     } catch (err: any) {
       setErrorMessage(err.message || '사진 업로드 중 문제가 발생했습니다.');
+    } finally {
+      // Reset input value so same file can be re-selected if needed
+      e.target.value = '';
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!imagePreview) {
-      setErrorMessage('관찰 사진을 등록해 주세요.');
-      return;
-    }
+    // Note: imagePreview is now OPTIONAL! Users can submit observations with or without a photo.
     if (!speciesName.trim()) {
       setErrorMessage('생물 이름을 입력해 주세요.');
       return;
@@ -96,7 +99,7 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
         category,
         classId,
         observerName: observerName.trim(),
-        imageUrl: imagePreview,
+        imageUrl: imagePreview || '', // Optional
         notes: notes.trim(),
         observedAt,
         coordinates,
@@ -127,7 +130,7 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
               <span>새 관찰 기록 등록</span>
             </h2>
             <p className="text-xs text-stone-500 font-medium mt-0.5">
-              사진과 함께 발견한 생물의 정보를 간단히 입력해 주세요.
+              발견한 생물의 정보를 입력해 주세요. (사진은 선택 사항입니다)
             </p>
           </div>
           <button
@@ -147,13 +150,28 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
             </div>
           )}
 
-          {/* 1. 사진 (Photo) */}
+          {/* 1. 사진 (Photo, optional with Camera vs Gallery selection) */}
           <div>
-            <label className="block text-xs font-bold text-stone-700 mb-1.5">
-              관찰 사진 <span className="text-rose-500">*</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-bold text-stone-700 flex items-center gap-1.5">
+                <span>관찰 사진</span>
+                <span className="text-[11px] font-normal text-stone-500 bg-stone-100 px-2 py-0.5 rounded-full">
+                  선택 사항
+                </span>
+              </label>
+              {imagePreview && (
+                <button
+                  type="button"
+                  onClick={() => setImagePreview('')}
+                  className="text-[11px] text-rose-600 hover:text-rose-700 font-semibold cursor-pointer"
+                >
+                  사진 삭제 (사진 없이 등록)
+                </button>
+              )}
+            </div>
 
             {imagePreview ? (
+              /* Image preview */
               <div className="relative rounded-2xl overflow-hidden bg-stone-100 border border-stone-200 h-52 flex items-center justify-center group">
                 <img
                   src={imagePreview}
@@ -168,36 +186,88 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
                 >
                   <X className="w-4 h-4" />
                 </button>
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="absolute bottom-2 right-2 px-3 py-1.5 bg-stone-900/80 backdrop-blur-xs text-white rounded-xl text-xs font-semibold hover:bg-stone-900 transition-colors flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Upload className="w-3.5 h-3.5" />
-                  <span>사진 바꾸기</span>
-                </button>
+
+                {/* Change photo options overlay */}
+                <div className="absolute bottom-2 right-2 flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="px-2.5 py-1.5 bg-stone-900/80 backdrop-blur-xs text-white rounded-xl text-xs font-semibold hover:bg-stone-900 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="카메라로 다시 촬영"
+                  >
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>촬영</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="px-2.5 py-1.5 bg-stone-900/80 backdrop-blur-xs text-white rounded-xl text-xs font-semibold hover:bg-stone-900 transition-colors flex items-center gap-1 cursor-pointer"
+                    title="앨범/갤러리에서 다시 선택"
+                  >
+                    <ImageIcon className="w-3.5 h-3.5" />
+                    <span>갤러리</span>
+                  </button>
+                </div>
               </div>
             ) : (
-              <div
-                onClick={() => fileInputRef.current?.click()}
-                className="border-2 border-dashed border-stone-300 hover:border-emerald-500 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer bg-stone-50/50 hover:bg-emerald-50/30 transition-all group"
-              >
-                <div className="w-12 h-12 rounded-2xl bg-white shadow-xs border border-stone-200 flex items-center justify-center text-stone-400 group-hover:text-emerald-600 group-hover:border-emerald-300 transition-colors mb-2">
-                  <Camera className="w-6 h-6 stroke-[1.8]" />
+              /* Two distinct buttons: Direct Camera VS Gallery/File app */
+              <div className="border border-stone-200 rounded-2xl p-4 bg-stone-50/70 space-y-2.5">
+                <p className="text-xs text-stone-600 text-center font-medium">
+                  사진 등록 방식을 선택해 주세요 (사진 없이도 등록 가능)
+                </p>
+                <div className="grid grid-cols-2 gap-2.5">
+                  {/* Option 1: Direct Camera */}
+                  <button
+                    type="button"
+                    onClick={() => cameraInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center p-3.5 bg-white hover:bg-emerald-50/50 border border-stone-200 hover:border-emerald-400 rounded-xl transition-all group cursor-pointer shadow-xs active:scale-98"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-1.5 group-hover:bg-emerald-600 group-hover:text-white transition-colors">
+                      <Camera className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold text-stone-800 group-hover:text-emerald-900">
+                      직접 촬영하기
+                    </span>
+                    <span className="text-[10px] text-stone-400 mt-0.5">
+                      카메라 앱 바로 실행
+                    </span>
+                  </button>
+
+                  {/* Option 2: Gallery / Files */}
+                  <button
+                    type="button"
+                    onClick={() => galleryInputRef.current?.click()}
+                    className="flex flex-col items-center justify-center p-3.5 bg-white hover:bg-sky-50/50 border border-stone-200 hover:border-sky-400 rounded-xl transition-all group cursor-pointer shadow-xs active:scale-98"
+                  >
+                    <div className="w-10 h-10 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center mb-1.5 group-hover:bg-sky-600 group-hover:text-white transition-colors">
+                      <ImageIcon className="w-5 h-5" />
+                    </div>
+                    <span className="text-xs font-bold text-stone-800 group-hover:text-sky-900">
+                      앨범에서 선택
+                    </span>
+                    <span className="text-[10px] text-stone-400 mt-0.5">
+                      갤러리 / 저장된 사진
+                    </span>
+                  </button>
                 </div>
-                <p className="text-sm font-bold text-stone-800">
-                  사진 촬영 또는 파일 선택
-                </p>
-                <p className="text-xs text-stone-500 mt-0.5">
-                  클릭하여 스마트폰 카메라로 찍거나 사진을 올려주세요.
-                </p>
               </div>
             )}
+
+            {/* Hidden Input 1: Direct Camera (capture="environment") */}
             <input
-              ref={fileInputRef}
+              ref={cameraInputRef}
               type="file"
               accept="image/*"
               capture="environment"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+
+            {/* Hidden Input 2: Gallery / Album (NO capture attribute) */}
+            <input
+              ref={galleryInputRef}
+              type="file"
+              accept="image/*"
               onChange={handleFileChange}
               className="hidden"
             />
