@@ -96,7 +96,7 @@ export const ObservationCard: React.FC<ObservationCardProps> = ({
             </span>
 
             <span className="shrink-0 text-stone-400">
-              {observation.observedAt.slice(0, 10)}
+              {(observation.observedAt || observation.createdAt || '').slice(0, 10) || '기록일 미상'}
             </span>
           </div>
         </div>

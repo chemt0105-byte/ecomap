@@ -167,7 +167,7 @@ export const ObservationDetail: React.FC<ObservationDetailProps> = ({
               <span className="text-stone-400 block mb-0.5 font-medium">관찰 일시</span>
               <span className="font-bold text-stone-800 flex items-center gap-1">
                 <Calendar className="w-3.5 h-3.5 text-stone-500" />
-                {observation.observedAt.slice(0, 16)}
+                {(observation.observedAt || observation.createdAt || '').slice(0, 16) || '관찰 일시 미상'}
               </span>
             </div>
           </div>

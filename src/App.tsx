@@ -76,6 +76,7 @@ export default function App() {
   const filteredObservations = React.useMemo(() => {
     return observations
       .filter(obs => {
+        if (!obs || !obs.id) return false;
         // Class Filter
         if (filter.selectedClassId !== 'all' && obs.classId !== filter.selectedClassId) {
           return false;
@@ -87,11 +88,11 @@ export default function App() {
         // Search Query
         if (filter.searchQuery.trim()) {
           const q = filter.searchQuery.toLowerCase();
-          const matchSpecies = obs.speciesName.toLowerCase().includes(q);
-          const matchSci = obs.scientificName?.toLowerCase().includes(q) || false;
-          const matchObserver = obs.observerName.toLowerCase().includes(q);
-          const matchLocation = obs.locationDescription.toLowerCase().includes(q);
-          const matchNotes = obs.notes.toLowerCase().includes(q);
+          const matchSpecies = (obs.speciesName || '').toLowerCase().includes(q);
+          const matchSci = (obs.scientificName || '').toLowerCase().includes(q);
+          const matchObserver = (obs.observerName || '').toLowerCase().includes(q);
+          const matchLocation = (obs.locationDescription || '').toLowerCase().includes(q);
+          const matchNotes = (obs.notes || '').toLowerCase().includes(q);
           if (!matchSpecies && !matchSci && !matchObserver && !matchLocation && !matchNotes) {
             return false;
           }
@@ -100,13 +101,17 @@ export default function App() {
       })
       .sort((a, b) => {
         if (filter.sortBy === 'latest') {
-          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+          const tA = new Date(a.createdAt || a.observedAt || 0).getTime();
+          const tB = new Date(b.createdAt || b.observedAt || 0).getTime();
+          return (isNaN(tB) ? 0 : tB) - (isNaN(tA) ? 0 : tA);
         }
         if (filter.sortBy === 'oldest') {
-          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+          const tA = new Date(a.createdAt || a.observedAt || 0).getTime();
+          const tB = new Date(b.createdAt || b.observedAt || 0).getTime();
+          return (isNaN(tA) ? 0 : tA) - (isNaN(tB) ? 0 : tB);
         }
         if (filter.sortBy === 'name') {
-          return a.speciesName.localeCompare(b.speciesName, 'ko-KR');
+          return (a.speciesName || '').localeCompare(b.speciesName || '', 'ko-KR');
         }
         return 0;
       });

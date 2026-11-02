@@ -62,7 +62,9 @@ export const EcologyMap: React.FC<EcologyMapProps> = ({
       let targetY = focusTarget.y;
 
       if (targetX === undefined || targetY === undefined) {
-        const converted = latLngToXY(focusTarget.lat, focusTarget.lng);
+        const lat = typeof focusTarget.lat === 'number' ? focusTarget.lat : JUNGHWA_HIGH_SCHOOL.coordinates.lat;
+        const lng = typeof focusTarget.lng === 'number' ? focusTarget.lng : JUNGHWA_HIGH_SCHOOL.coordinates.lng;
+        const converted = latLngToXY(lat, lng);
         targetX = converted.x;
         targetY = converted.y;
       }
@@ -395,17 +397,21 @@ export const EcologyMap: React.FC<EcologyMapProps> = ({
 
             {/* Observation Markers Overlaid on the Satellite Image */}
             {observations.map(obs => {
+              if (!obs || !obs.id) return null;
               const isSelected = selectedObservation?.id === obs.id;
               const category = CATEGORIES[obs.category] || CATEGORIES.other;
               const classItem = DEFAULT_CLASSES.find(c => c.id === obs.classId);
-              const classShort = classItem ? classItem.shortLabel : obs.classId;
+              const classShort = classItem ? classItem.shortLabel : (obs.classId || '1반');
 
-              // Compute x, y coordinates percentage
-              let pinX = obs.coordinates.x;
-              let pinY = obs.coordinates.y;
+              // Compute x, y coordinates percentage safely
+              const coords = obs.coordinates || JUNGHWA_HIGH_SCHOOL.coordinates;
+              let pinX = coords.x;
+              let pinY = coords.y;
 
               if (pinX === undefined || pinY === undefined) {
-                const converted = latLngToXY(obs.coordinates.lat, obs.coordinates.lng);
+                const lat = typeof coords.lat === 'number' ? coords.lat : JUNGHWA_HIGH_SCHOOL.coordinates.lat;
+                const lng = typeof coords.lng === 'number' ? coords.lng : JUNGHWA_HIGH_SCHOOL.coordinates.lng;
+                const converted = latLngToXY(lat, lng);
                 pinX = converted.x;
                 pinY = converted.y;
               }

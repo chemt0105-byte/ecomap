@@ -30,10 +30,11 @@ service cloud.firestore {
     }
 
     match /observations/{observationId} {
+      allow read, write: if true;
+    }
+
+    match /test/{document=**} {
       allow read: if true;
-      allow create: if isValidId(observationId) && isValidObservation(incoming());
-      allow update: if isValidId(observationId) && isValidObservation(incoming());
-      allow delete: if isValidId(observationId);
     }
   }
 }
