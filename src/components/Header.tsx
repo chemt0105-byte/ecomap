@@ -9,7 +9,7 @@ import {
   HelpCircle,
   History,
 } from 'lucide-react';
-import { isTeacherMode } from '../services/authService';
+import { useTeacherMode } from '../services/authService';
 
 interface HeaderProps {
   totalCount: number;
@@ -34,7 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   onRefresh,
   isLoading,
 }) => {
-  const isTeacher = isTeacherMode();
+  const isTeacher = useTeacherMode();
 
   return (
     <header className="bg-white border-b border-stone-200 sticky top-0 z-30 shadow-xs">
@@ -99,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-stone-900 border border-stone-200 transition-colors cursor-pointer"
             >
               <History className="w-3.5 h-3.5 text-stone-500" />
-              <span>v1.4.0</span>
+              <span>v1.4.2</span>
             </button>
 
             {/* 4. 교사 모드 버튼 */}

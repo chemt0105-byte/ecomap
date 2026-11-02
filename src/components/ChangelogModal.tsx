@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ChangelogItem } from '../types/changelog';
 import { getChangelog, saveChangelog } from '../services/changelogService';
-import { isTeacherMode } from '../services/authService';
+import { useTeacherMode } from '../services/authService';
 import {
   History,
   X,
@@ -30,7 +30,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
   const [editItems, setEditItems] = useState<ChangelogItem[]>([]);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
-  const isTeacher = isTeacherMode();
+  const isTeacher = useTeacherMode();
 
   const loadData = async () => {
     setIsLoading(true);

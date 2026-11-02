@@ -4,6 +4,17 @@ const CHANGELOG_CACHE_KEY = 'junghwa_changelog_cache';
 
 export const INITIAL_CHANGELOG: ChangelogItem[] = [
   {
+    id: 'v1.4.2',
+    version: 'v1.4.2',
+    date: '2026-11-02',
+    title: '앱 접속 시 기본 학생 모드 보장 (교사 모드 자동 활성화 해제)',
+    changes: [
+      '앱 접속 시 이전 교사 인증 세션이 자동으로 유지되던 현상 완전 차단',
+      '접속 시에는 항상 일반 학생 모드로 안전하게 시작되며, 상단 [교사 로그인] 버튼을 통해 명시적 비밀번호 인증 시에만 교사 권한 활성화',
+      '브라우저 재접속 또는 새로고침 시에도 학생 모드로 초기화되도록 세션 보안 강화',
+    ],
+  },
+  {
     id: 'v1.4.1',
     version: 'v1.4.1',
     date: '2026-11-02',

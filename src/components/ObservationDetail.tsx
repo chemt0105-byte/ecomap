@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Observation } from '../types/observation';
 import { CATEGORIES, DEFAULT_CLASSES } from '../config/mapConfig';
-import { isAuthor, isTeacherMode, checkDeletePermission } from '../services/authService';
+import { isAuthor, useTeacherMode, checkDeletePermission } from '../services/authService';
 import {
   X,
   User,
@@ -39,7 +39,7 @@ export const ObservationDetail: React.FC<ObservationDetailProps> = ({
 
   const isLegacyOrSample = observation.id.startsWith('sample_') || (!observation.authorId && !observation.deletePassword);
   const isMyPost = isAuthor(observation);
-  const isTeacher = isTeacherMode();
+  const isTeacher = useTeacherMode();
 
   // 삭제 버튼 클릭 시 권한에 따라 분기
   const handleInitiateDelete = () => {

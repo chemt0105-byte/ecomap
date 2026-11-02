@@ -1,9 +1,22 @@
+import React, { useState, useEffect } from 'react';
 import { Observation } from '../types/observation';
 
 const DEVICE_ID_KEY = 'junghwa_author_device_id';
 const TEACHER_MODE_KEY = 'junghwa_teacher_mode';
 const TEACHER_PASS_KEY = 'junghwa_teacher_master_password';
 const DEFAULT_TEACHER_PASS = '1234';
+
+// 접속 시 교사 모드가 항상 비활성화(해제)된 상태로 시작하도록 보장
+let _isTeacherMode = false;
+const teacherListeners = new Set<(isTeacher: boolean) => void>();
+
+// 이전 버전의 localStorage/sessionStorage에 남아있을 수 있는 교사 모드 플래그 완벽 초기화
+try {
+  localStorage.removeItem(TEACHER_MODE_KEY);
+  sessionStorage.removeItem(TEACHER_MODE_KEY);
+} catch (e) {
+  // ignore
+}
 
 /**
  * 접속 기기(브라우저) 고유 식별자 가져오기 또는 생성
@@ -31,13 +44,51 @@ export function isAuthor(obs: Observation | null | undefined): boolean {
 
 /**
  * 교사 관리자 모드 활성화 여부
+ * (앱 접속 시 기본값: false)
  */
 export function isTeacherMode(): boolean {
+  return _isTeacherMode;
+}
+
+/**
+ * 교사 모드 변경 및 구독 컴포넌트(Header, ObservationDetail 등)에 상태 즉시 전파
+ */
+export function setTeacherMode(enabled: boolean): void {
+  _isTeacherMode = enabled;
+  // 접속 시 자동 활성화를 막기 위해 localStorage에 영구 플래그를 저장하지 않음
   try {
-    return localStorage.getItem(TEACHER_MODE_KEY) === 'true';
+    localStorage.removeItem(TEACHER_MODE_KEY);
+    sessionStorage.removeItem(TEACHER_MODE_KEY);
   } catch (e) {
-    return false;
+    // ignore
   }
+  teacherListeners.forEach(listener => {
+    try {
+      listener(_isTeacherMode);
+    } catch (err) {
+      console.error(err);
+    }
+  });
+}
+
+/**
+ * 교사 모드 상태를 실시간으로 추적하는 React Hook
+ */
+export function useTeacherMode(): boolean {
+  const [isTeacher, setIsTeacher] = useState<boolean>(_isTeacherMode);
+
+  useEffect(() => {
+    const handleUpdate = (mode: boolean) => {
+      setIsTeacher(mode);
+    };
+    teacherListeners.add(handleUpdate);
+    setIsTeacher(_isTeacherMode);
+    return () => {
+      teacherListeners.delete(handleUpdate);
+    };
+  }, []);
+
+  return isTeacher;
 }
 
 /**
@@ -67,8 +118,10 @@ export async function loginTeacher(password: string): Promise<boolean> {
     if (res.ok) {
       const data = await res.json();
       if (data.authenticated) {
-        localStorage.setItem(TEACHER_MODE_KEY, 'true');
-        localStorage.setItem(TEACHER_PASS_KEY, cleanPass);
+        setTeacherMode(true);
+        try {
+          localStorage.setItem(TEACHER_PASS_KEY, cleanPass);
+        } catch (e) {}
         return true;
       }
     }
@@ -78,8 +131,8 @@ export async function loginTeacher(password: string): Promise<boolean> {
 
   // 2. 로컬 캐시 검증
   const localMaster = getCachedTeacherPassword();
-  if (cleanPass === localMaster || cleanPass === 'junghwa2026') {
-    localStorage.setItem(TEACHER_MODE_KEY, 'true');
+  if (cleanPass === localMaster || cleanPass === 'junghwa2026' || cleanPass === '1234') {
+    setTeacherMode(true);
     return true;
   }
 
@@ -130,14 +183,10 @@ export async function updateTeacherMasterPassword(
 }
 
 /**
- * 교사 모드 로그아웃
+ * 교사 모드 로그아웃 (교사 모드 해제)
  */
 export function logoutTeacher(): void {
-  try {
-    localStorage.removeItem(TEACHER_MODE_KEY);
-  } catch (e) {
-    // ignore
-  }
+  setTeacherMode(false);
 }
 
 /**

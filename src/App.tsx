@@ -7,6 +7,7 @@ import {
   deleteObservation,
   subscribeToObservationsSync,
 } from './services/observationService';
+import { logoutTeacher } from './services/authService';
 
 import { Header } from './components/Header';
 import { ClassTabs } from './components/ClassTabs';
@@ -64,6 +65,8 @@ export default function App() {
   }, []);
 
   React.useEffect(() => {
+    // 앱 접속(페이지 로드) 시 항상 교사 모드가 해제(학생 모드)된 상태로 시작하도록 보장
+    logoutTeacher();
     loadData();
     // Subscribe to multi-tab / broadcast updates
     const unsubscribe = subscribeToObservationsSync(() => {

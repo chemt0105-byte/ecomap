@@ -3,6 +3,7 @@ import {
   loginTeacher,
   logoutTeacher,
   isTeacherMode,
+  useTeacherMode,
   updateTeacherMasterPassword,
 } from '../services/authService';
 import {
@@ -27,7 +28,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
   onClose,
   onAuthChanged,
 }) => {
-  const isTeacher = isTeacherMode();
+  const isTeacher = useTeacherMode();
   const [view, setView] = useState<'status' | 'login' | 'change_password'>(
     isTeacher ? 'status' : 'login'
   );
