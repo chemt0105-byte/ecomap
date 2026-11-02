@@ -51,7 +51,7 @@ export const ObservationForm: React.FC<ObservationFormProps> = ({
     if (!file) return;
 
     try {
-      const compressedDataUrl = await compressAndEncodeImage(file, 1200, 1200, 0.85);
+      const compressedDataUrl = await compressAndEncodeImage(file, 800, 800, 0.75);
       setImagePreview(compressedDataUrl);
       setErrorMessage('');
     } catch (err: any) {

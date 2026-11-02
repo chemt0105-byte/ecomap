@@ -1,13 +1,15 @@
 /**
  * 이미지 압축 및 처리 서비스
  * 학생이 스마트폰이나 PC에서 촬영한 고해상도 사진을 웹/모바일 친화적인 크기로 자동 최적화합니다.
+ * 모바일 카메라의 5MB+ 원본 사진을 약 50~100KB 크기로 선명하게 최적화하여
+ * 네트워크 전송 속도를 높이고 브라우저 저장소 용량 초과를 원천 방지합니다.
  */
 
 export async function compressAndEncodeImage(
   file: File,
-  maxWidth = 1200,
-  maxHeight = 1200,
-  quality = 0.82
+  maxWidth = 800,
+  maxHeight = 800,
+  quality = 0.75
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

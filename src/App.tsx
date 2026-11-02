@@ -19,11 +19,12 @@ import { DevToolsModal } from './components/DevToolsModal';
 import { TeacherAuthModal } from './components/TeacherAuthModal';
 import { StudentGuideModal } from './components/StudentGuideModal';
 import { ChangelogModal } from './components/ChangelogModal';
-import { Map, ListFilter, Plus } from 'lucide-react';
+import { Map, ListFilter, Plus, CheckCircle2, AlertCircle, X } from 'lucide-react';
 
 export default function App() {
   const [observations, setObservations] = React.useState<Observation[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [toast, setToast] = React.useState<{ text: string; type: 'success' | 'info' | 'error' } | null>(null);
 
   // Filter & Search State
   const [filter, setFilter] = React.useState<ObservationFilter>({
@@ -140,19 +141,52 @@ export default function App() {
     setMobileTab('map');
   };
 
+  // Auto-dismiss toast after 4.5 seconds
+  React.useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => {
+      setToast(null);
+    }, 4500);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
   // Add new observation
   const handleAddObservation = async (data: Omit<Observation, 'id' | 'createdAt'>) => {
-    await addObservation(data);
-    await loadData();
+    try {
+      const saved = await addObservation(data);
+      await loadData();
+      setSelectedObservation(saved);
+      setTargetFocusCoords(saved.coordinates);
+      setToast({
+        text: `"${saved.speciesName}" 관찰 기록이 안전하게 저장되었습니다! 지도의 핀과 목록에서 확인할 수 있습니다.`,
+        type: 'success',
+      });
+    } catch (err: any) {
+      setToast({
+        text: err?.message || '저장 중 오류가 발생했습니다.',
+        type: 'error',
+      });
+    }
   };
 
   // Delete observation
   const handleDeleteObservation = async (id: string) => {
-    await deleteObservation(id);
-    if (selectedObservation?.id === id) {
-      setSelectedObservation(null);
+    try {
+      await deleteObservation(id);
+      if (selectedObservation?.id === id) {
+        setSelectedObservation(null);
+      }
+      await loadData();
+      setToast({
+        text: '관찰 기록이 삭제되었습니다.',
+        type: 'info',
+      });
+    } catch (err: any) {
+      setToast({
+        text: '삭제 중 문제가 발생했습니다.',
+        type: 'error',
+      });
     }
-    await loadData();
   };
 
   return (
@@ -323,6 +357,37 @@ export default function App() {
         isOpen={isChangelogModalOpen}
         onClose={() => setIsChangelogModalOpen(false)}
       />
+
+      {/* Floating Toast Notification */}
+      {toast && (
+        <aside
+          role="status"
+          aria-live="polite"
+          className={`fixed top-20 left-1/2 -translate-x-1/2 z-50 max-w-md w-[92%] sm:w-auto px-4 py-3 rounded-2xl shadow-xl flex items-center gap-3 animate-in slide-in-from-top-4 fade-in duration-200 border transition-all ${
+            toast.type === 'success'
+              ? 'bg-emerald-900 text-white border-emerald-700 shadow-emerald-950/20'
+              : toast.type === 'error'
+              ? 'bg-red-900 text-white border-red-700 shadow-red-950/20'
+              : 'bg-stone-900 text-white border-stone-700 shadow-stone-950/20'
+          }`}
+        >
+          {toast.type === 'success' ? (
+            <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+          ) : toast.type === 'error' ? (
+            <AlertCircle className="w-5 h-5 text-red-400 shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-5 h-5 text-stone-400 shrink-0" />
+          )}
+          <p className="text-xs sm:text-sm font-semibold flex-1 leading-tight">{toast.text}</p>
+          <button
+            onClick={() => setToast(null)}
+            className="p-1 rounded-lg text-white/70 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            aria-label="닫기"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </aside>
+      )}
     </div>
   );
 }
