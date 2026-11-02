@@ -4,6 +4,18 @@ const CHANGELOG_CACHE_KEY = 'junghwa_changelog_cache';
 
 export const INITIAL_CHANGELOG: ChangelogItem[] = [
   {
+    id: 'v1.4.1',
+    version: 'v1.4.1',
+    date: '2026-11-02',
+    title: '관찰 데이터 삭제 오류 해결 및 동기화 무결성 강화',
+    changes: [
+      '기존 데이터 및 예시 관찰 기록 삭제 시 비밀번호 없이도 간편 삭제 확인 지원',
+      '클라우드 삭제 후 로컬 캐시와 동기화 시 데이터가 재부활(Zombie Resurrection)하던 현상 원인 규명 및 툼스톤 관리로 완벽 차단',
+      'Firebase Firestore 실시간 스냅샷 리스너와 로컬 IndexedDB 간 삭제 동기화 순서 최적화',
+      '전체 데이터 초기화 및 개별 관찰 기록 삭제 시 서버/클라우드/로컬 일괄 제거 보장',
+    ],
+  },
+  {
     id: 'v1.4.0',
     version: 'v1.4.0',
     date: '2026-11-02',

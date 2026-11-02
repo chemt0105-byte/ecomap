@@ -37,6 +37,7 @@ export const ObservationDetail: React.FC<ObservationDetailProps> = ({
   const classItem = DEFAULT_CLASSES.find(c => c.id === observation.classId);
   const classLabel = classItem ? classItem.label : observation.classId;
 
+  const isLegacyOrSample = observation.id.startsWith('sample_') || (!observation.authorId && !observation.deletePassword);
   const isMyPost = isAuthor(observation);
   const isTeacher = isTeacherMode();
 
@@ -44,14 +45,14 @@ export const ObservationDetail: React.FC<ObservationDetailProps> = ({
   const handleInitiateDelete = () => {
     setPinError('');
     setInputPin('');
-    if (isMyPost || isTeacher) {
+    if (isMyPost || isTeacher || isLegacyOrSample) {
       setDeleteStep('confirm_author');
     } else {
       setDeleteStep('require_pin');
     }
   };
 
-  // 본인 또는 교사 확인 후 삭제
+  // 본인, 교사 또는 기존/예시 데이터 확인 후 삭제
   const handleConfirmDirectDelete = () => {
     onDelete(observation.id);
     setDeleteStep('idle');
@@ -248,7 +249,11 @@ export const ObservationDetail: React.FC<ObservationDetailProps> = ({
           ) : deleteStep === 'confirm_author' ? (
             <div className="flex items-center gap-2">
               <span className="text-xs text-rose-700 font-bold">
-                {isTeacher ? '교사 권한으로 삭제할까요?' : '내 기록을 정말 삭제할까요?'}
+                {isTeacher
+                  ? '교사 권한으로 삭제할까요?'
+                  : isMyPost
+                  ? '내 기록을 정말 삭제할까요?'
+                  : '관찰 기록을 정말 삭제할까요?'}
               </span>
               <button
                 onClick={handleConfirmDirectDelete}

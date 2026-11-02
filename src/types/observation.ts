@@ -51,6 +51,7 @@ export interface Observation {
   deletePassword?: string; // 작성 시 설정한 간편 삭제 비밀번호 (선택 또는 4자리 PIN)
   createdAt: string;
   updatedAt?: string;
+  _pendingSync?: boolean; // 오프라인 작성 후 클라우드 동기화 대기 플래그
 }
 
 export interface ObservationFilter {

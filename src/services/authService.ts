@@ -146,26 +146,36 @@ export function logoutTeacher(): void {
 export function checkDeletePermission(
   obs: Observation,
   inputPin?: string
-): { allowed: boolean; reason: 'author_device' | 'teacher_mode' | 'pin_match' | 'teacher_pin' | 'denied' } {
+): { allowed: boolean; reason: 'author_device' | 'teacher_mode' | 'legacy_data' | 'pin_match' | 'teacher_pin' | 'denied' } {
   // 1. 교사 모드 활성화 상태인 경우 무조건 허용
   if (isTeacherMode()) {
     return { allowed: true, reason: 'teacher_mode' };
   }
 
-  // 2. 작성한 본인 기기인 경우 바로 허용
+  // 2. 예시 데이터(sample_obs_*) 또는 비밀번호/작성자ID가 없는 기존 데이터는 누구나 삭제 가능
+  if (obs.id.startsWith('sample_') || (!obs.authorId && !obs.deletePassword)) {
+    return { allowed: true, reason: 'legacy_data' };
+  }
+
+  // 3. 작성한 본인 기기인 경우 바로 허용
   if (obs.authorId && obs.authorId === getDeviceId()) {
     return { allowed: true, reason: 'author_device' };
   }
 
-  // 3. 입력된 PIN이 작성 당시 비밀번호와 일치하는 경우
+  // 4. 입력된 PIN이 작성 당시 비밀번호와 일치하는 경우
   if (inputPin && obs.deletePassword && inputPin.trim() === obs.deletePassword.trim()) {
     return { allowed: true, reason: 'pin_match' };
   }
 
-  // 4. 입력된 PIN이 교사 마스터 비밀번호와 일치하는 경우
+  // 5. 입력된 PIN이 교사 마스터 비밀번호(1234, junghwa2026 등)와 일치하는 경우
   const masterPass = getCachedTeacherPassword();
-  if (inputPin && (inputPin.trim() === masterPass || inputPin.trim() === 'junghwa2026')) {
+  if (inputPin && (inputPin.trim() === masterPass || inputPin.trim() === '1234' || inputPin.trim() === 'junghwa2026')) {
     return { allowed: true, reason: 'teacher_pin' };
+  }
+
+  // 6. 비밀번호가 설정되지 않았던 게시물인 경우
+  if (!obs.deletePassword) {
+    return { allowed: true, reason: 'legacy_data' };
   }
 
   return { allowed: false, reason: 'denied' };
