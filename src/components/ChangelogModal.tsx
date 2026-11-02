@@ -299,7 +299,7 @@ export const ChangelogModal: React.FC<ChangelogModalProps> = ({
           ) : (
             <div className="flex items-center justify-between w-full">
               <span className="text-[11px] text-stone-400">
-                중화고등학교 생태지도 v1.3.0
+                중화고등학교 생태지도 v1.4.0 (Cloud DB 연동)
               </span>
               <button
                 onClick={onClose}

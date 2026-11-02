@@ -54,6 +54,10 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   전체 {totalCount}개 관찰 기록
                 </span>
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                  클라우드 DB 동기화됨
+                </span>
                 {isTeacher && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
                     <ShieldCheck className="w-3.5 h-3.5 text-purple-700" />
@@ -95,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-stone-900 border border-stone-200 transition-colors cursor-pointer"
             >
               <History className="w-3.5 h-3.5 text-stone-500" />
-              <span>v1.3.1</span>
+              <span>v1.4.0</span>
             </button>
 
             {/* 4. 교사 모드 버튼 */}

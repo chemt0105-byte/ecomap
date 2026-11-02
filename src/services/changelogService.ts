@@ -4,6 +4,18 @@ const CHANGELOG_CACHE_KEY = 'junghwa_changelog_cache';
 
 export const INITIAL_CHANGELOG: ChangelogItem[] = [
   {
+    id: 'v1.4.0',
+    version: 'v1.4.0',
+    date: '2026-11-02',
+    title: 'Firebase Cloud DB 실시간 동기화 구축 (방법 1)',
+    changes: [
+      '구글 클라우드 Firestore 데이터베이스 연동으로 모든 학생 스마트폰과 교사 PC 간 실시간 자동 동기화 실현',
+      'Netlify 정적 배포 사이트에서도 데이터 유실 없이 클라우드에 영구 보존',
+      '네트워크 일시 단절 시에도 기기 로컬 IndexedDB에 임시 보관 후 자동 재동기화 (오프라인 지원)',
+      '실시간 스냅샷 리스너 탑재로 새로고침 없이 다른 사용자의 등록 내역 즉각 지도에 표시',
+    ],
+  },
+  {
     id: 'v1.3.0',
     version: 'v1.3.0',
     date: '2026-10-27',

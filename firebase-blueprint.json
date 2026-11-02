@@ -1,0 +1,102 @@
+{
+  "entities": {
+    "Observation": {
+      "title": "Observation",
+      "description": "Junghwa High School campus ecological observation record",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Unique identifier of the observation"
+        },
+        "speciesName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Common name of the observed species"
+        },
+        "scientificName": {
+          "type": "string",
+          "maxLength": 100,
+          "description": "Scientific name of the species"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["plant", "animal", "bird", "insect", "fungi", "other"],
+          "description": "Biological category"
+        },
+        "classId": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Observer class identifier"
+        },
+        "observerName": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Name or group of student observer"
+        },
+        "observedAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Date or time of observation"
+        },
+        "locationDescription": {
+          "type": "string",
+          "maxLength": 200,
+          "description": "Location description on school grounds"
+        },
+        "imageUrl": {
+          "type": "string",
+          "maxLength": 500000,
+          "description": "Base64 data or photo URL"
+        },
+        "notes": {
+          "type": "string",
+          "maxLength": 2000,
+          "description": "Ecological notes and characteristics"
+        },
+        "season": {
+          "type": "string",
+          "maxLength": 20,
+          "description": "Season"
+        },
+        "weather": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Weather"
+        },
+        "likes": {
+          "type": "number",
+          "description": "Like counts"
+        },
+        "authorId": {
+          "type": "string",
+          "maxLength": 128,
+          "description": "Author device ID"
+        },
+        "deletePassword": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "PIN password for deletion"
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 50,
+          "description": "Update timestamp"
+        }
+      },
+      "required": ["id", "speciesName", "category", "classId", "observerName", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/observations/{observationId}": {
+      "schema": "Observation",
+      "description": "Collection of ecological observations"
+    }
+  }
+}

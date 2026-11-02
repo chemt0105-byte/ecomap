@@ -1,4 +1,15 @@
+import {
+  collection,
+  doc,
+  getDocs,
+  setDoc,
+  deleteDoc,
+  updateDoc,
+  onSnapshot,
+} from 'firebase/firestore';
+import { db, handleFirestoreError, OperationType } from './firebase';
 import { Observation } from '../types/observation';
+import { SAMPLE_OBSERVATIONS } from '../data/sampleObservations';
 import {
   getLocalObservations,
   saveLocalObservations,
@@ -13,11 +24,21 @@ try {
   if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
     broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
   }
-} catch (e) {
+} catch {
   // ignore
 }
 
-function notifySync(): void {
+const syncListeners = new Set<() => void>();
+
+function notifyAllListeners(): void {
+  for (const listener of syncListeners) {
+    try {
+      listener();
+    } catch (e) {
+      console.warn('Listener notification error:', e);
+    }
+  }
+
   if (broadcastChannel) {
     try {
       broadcastChannel.postMessage({ type: 'OBSERVATIONS_UPDATED', timestamp: Date.now() });
@@ -28,20 +49,18 @@ function notifySync(): void {
 }
 
 /**
- * Merge two observation lists by ID preserving the newest updates
+ * Merge two observation lists by ID preserving newest updates
  */
-function mergeObservations(serverList: Observation[], localList: Observation[]): Observation[] {
+function mergeObservations(primaryList: Observation[], fallbackList: Observation[]): Observation[] {
   const map = new Map<string, Observation>();
 
-  // Insert server items first
-  for (const item of serverList) {
+  for (const item of primaryList) {
     if (item && item.id) {
       map.set(item.id, item);
     }
   }
 
-  // Merge local items that are not in server yet
-  for (const item of localList) {
+  for (const item of fallbackList) {
     if (item && item.id) {
       if (!map.has(item.id)) {
         map.set(item.id, item);
@@ -54,115 +73,170 @@ function mergeObservations(serverList: Observation[], localList: Observation[]):
   );
 }
 
-/**
- * Sync unpushed local observations to the server in the background
- */
-async function syncUnpushedToServer(localList: Observation[], serverList: Observation[]): Promise<void> {
-  const serverIds = new Set(serverList.map(s => s.id));
-  const unpushed = localList.filter(item => item && item.id && !serverIds.has(item.id));
+// Background push unsynced local observations to Firestore
+async function syncLocalToFirestore(localRecords: Observation[], cloudIds: Set<string>): Promise<void> {
+  const unsynced = localRecords.filter(r => r && r.id && !cloudIds.has(r.id));
+  for (const record of unsynced) {
+    try {
+      await setDoc(doc(db, 'observations', record.id), record);
+    } catch (err) {
+      console.warn('Background sync to Firestore failed for record:', record.id, err);
+    }
+  }
+}
 
-  if (unpushed.length === 0) return;
+let isFirestoreListenerInitialized = false;
+
+/**
+ * Real-time Firestore snapshot listener:
+ * Automatically pulls observations when any student or teacher posts anywhere.
+ */
+function initializeFirestoreListener(): void {
+  if (isFirestoreListenerInitialized || typeof window === 'undefined') return;
+  isFirestoreListenerInitialized = true;
 
   try {
-    await fetch('/api/observations/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ records: unpushed }),
-    });
-  } catch {
-    // If batch sync is not supported or fails, push individually
-    for (const item of unpushed) {
-      try {
-        await fetch('/api/observations', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item),
+    onSnapshot(
+      collection(db, 'observations'),
+      async (snapshot) => {
+        const cloudRecords: Observation[] = [];
+        snapshot.forEach((docSnap) => {
+          cloudRecords.push(docSnap.data() as Observation);
         });
-      } catch {
-        break;
+
+        const localRecords = await getLocalObservations();
+        const merged = mergeObservations(cloudRecords, localRecords);
+
+        await saveLocalObservations(merged);
+        notifyAllListeners();
+
+        // If local had records not in cloud, push them to Firestore
+        const cloudIds = new Set(cloudRecords.map(c => c.id));
+        if (merged.length > cloudRecords.length) {
+          syncLocalToFirestore(localRecords, cloudIds).catch(() => {});
+        }
+      },
+      (error) => {
+        console.warn('Firestore snapshot listener error:', error);
+        handleFirestoreError(error, OperationType.GET, 'observations');
       }
-    }
+    );
+  } catch (err) {
+    console.warn('Failed to attach Firestore onSnapshot:', err);
   }
 }
 
 /**
  * 전체 관찰 기록 조회
- * 1. 서버 API 호출 시도
- * 2. 성공 시 로컬 IndexedDB 데이터와 병합하여 누락 방지
- * 3. 서버가 비어있거나 통신 불가 시 로컬 데이터 안전 반환 (절대 빈 배열로 덮어쓰지 않음)
+ * 1. Cloud Firestore에서 실시간 최신 목록 취득
+ * 2. 만약 Firestore가 완전 비어있다면 샘플 데이터 자동 초기화 (지도가 비어 보이지 않도록 방지)
+ * 3. 로컬 IndexedDB에 항상 안전하게 동기화 저장
+ * 4. 네트워크 단절 시 IndexedDB 로컬 데이터 반환
  */
 export async function getObservations(): Promise<Observation[]> {
+  initializeFirestoreListener();
+
   const localData = await getLocalObservations();
 
+  try {
+    const querySnapshot = await getDocs(collection(db, 'observations'));
+    const cloudRecords: Observation[] = [];
+
+    querySnapshot.forEach((docSnap) => {
+      cloudRecords.push(docSnap.data() as Observation);
+    });
+
+    if (cloudRecords.length > 0) {
+      const merged = mergeObservations(cloudRecords, localData);
+      await saveLocalObservations(merged);
+
+      // Auto-sync unpushed local records if any
+      const cloudIds = new Set(cloudRecords.map(c => c.id));
+      if (merged.length > cloudRecords.length) {
+        syncLocalToFirestore(localData, cloudIds).catch(() => {});
+      }
+
+      return merged;
+    } else {
+      // Cloud is brand new/empty: seed initial observations or local data
+      const recordsToSeed = localData.length > 0 ? localData : SAMPLE_OBSERVATIONS;
+      for (const item of recordsToSeed) {
+        try {
+          await setDoc(doc(db, 'observations', item.id), item);
+        } catch {
+          // ignore individual seed failure
+        }
+      }
+      await saveLocalObservations(recordsToSeed);
+      return recordsToSeed;
+    }
+  } catch (err) {
+    console.warn('Firestore getDocs fallback to local cache:', err);
+  }
+
+  // Fallback to Express backend if reachable
   try {
     const response = await fetch('/api/observations', {
       headers: { Accept: 'application/json' },
     });
-
     const contentType = response.headers.get('content-type') || '';
     if (response.ok && contentType.includes('application/json')) {
       const result = await response.json();
       if (result.success && Array.isArray(result.data)) {
-        const serverData: Observation[] = result.data;
-
-        // Merge server and local records
-        const merged = mergeObservations(serverData, localData);
+        const merged = mergeObservations(result.data, localData);
         await saveLocalObservations(merged);
-
-        // Background sync: If local has student records not yet on server, push them
-        if (merged.length > serverData.length) {
-          syncUnpushedToServer(localData, serverData).catch(() => {});
-        }
-
         return merged;
       }
     }
-  } catch (err) {
-    console.warn('Server API not reachable or static host, using local database cache:', err);
+  } catch {
+    // ignore
   }
 
-  // Fallback to local store (IndexedDB / localStorage)
-  return localData;
+  return localData.length > 0 ? localData : SAMPLE_OBSERVATIONS;
 }
 
 /**
  * 새로운 관찰 기록 등록
- * 1. 즉시 로컬 데이터베이스(IndexedDB)에 저장하여 데이터 유실 100% 방지
- * 2. 서버 API로 전송하여 중앙 데이터베이스에 영구 보존
+ * 1. 로컬 IndexedDB에 먼저 저장 (오프라인/지연 방지)
+ * 2. Cloud Firestore에 기록 저장 -> 모든 학생/교사 기기에 실시간 자동 전파
+ * 3. 로컬 Express 서버에도 백업 저장
  */
 export async function addObservation(
   newRecord: Omit<Observation, 'id' | 'createdAt'>
 ): Promise<Observation> {
+  initializeFirestoreListener();
+
   const item: Observation = {
     ...newRecord,
     id: 'obs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
     createdAt: new Date().toISOString(),
   };
 
-  // 1. Immediately save to local high-capacity store (IndexedDB)
+  // 1. Immediately save to IndexedDB
   await addLocalObservation(item);
-  notifySync();
+  notifyAllListeners();
 
-  // 2. Persist to server API
+  // 2. Persist to Cloud Firestore
   try {
-    const response = await fetch('/api/observations', {
+    await setDoc(doc(db, 'observations', item.id), item);
+  } catch (err) {
+    console.warn('Firestore setDoc failed:', err);
+    try {
+      handleFirestoreError(err, OperationType.WRITE, `observations/${item.id}`);
+    } catch {
+      // Keep local observation safe even if cloud throws
+    }
+  }
+
+  // 3. Background backup to Express server
+  try {
+    fetch('/api/observations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item),
-    });
-
-    const contentType = response.headers.get('content-type') || '';
-    if (response.ok && contentType.includes('application/json')) {
-      const result = await response.json();
-      if (result.success && result.data) {
-        const saved = result.data;
-        await addLocalObservation(saved);
-        notifySync();
-        return saved;
-      }
-    }
-  } catch (err) {
-    console.warn('Server API not reachable right now; record safely preserved in local database:', err);
+    }).catch(() => {});
+  } catch {
+    // ignore
   }
 
   return item;
@@ -187,27 +261,30 @@ export async function updateObservation(
     };
     updatedItem = currentList[index];
     await saveLocalObservations(currentList);
-    notifySync();
+    notifyAllListeners();
   }
 
+  // Update in Cloud Firestore
   try {
-    const response = await fetch(`/api/observations/${id}`, {
+    await updateDoc(doc(db, 'observations', id), updates);
+  } catch (err) {
+    console.warn('Firestore updateDoc failed:', err);
+    try {
+      handleFirestoreError(err, OperationType.UPDATE, `observations/${id}`);
+    } catch {
+      // Local copy is already updated
+    }
+  }
+
+  // Update in Express server
+  try {
+    fetch(`/api/observations/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(updates),
-    });
-
-    const contentType = response.headers.get('content-type') || '';
-    if (response.ok && contentType.includes('application/json')) {
-      const result = await response.json();
-      if (result.success && result.data) {
-        await addLocalObservation(result.data);
-        notifySync();
-        return result.data;
-      }
-    }
-  } catch (err) {
-    console.warn('Failed to update on server, applied to local database:', err);
+    }).catch(() => {});
+  } catch {
+    // ignore
   }
 
   return updatedItem;
@@ -217,16 +294,29 @@ export async function updateObservation(
  * 관찰 기록 삭제
  */
 export async function deleteObservation(id: string): Promise<boolean> {
-  // Delete locally first
+  // 1. Delete locally first
   await deleteLocalObservation(id);
-  notifySync();
+  notifyAllListeners();
 
+  // 2. Delete from Cloud Firestore
   try {
-    await fetch(`/api/observations/${id}`, {
-      method: 'DELETE',
-    });
+    await deleteDoc(doc(db, 'observations', id));
   } catch (err) {
-    console.warn('Server delete failed, removed from local database:', err);
+    console.warn('Firestore deleteDoc failed:', err);
+    try {
+      handleFirestoreError(err, OperationType.DELETE, `observations/${id}`);
+    } catch {
+      // Local copy is deleted
+    }
+  }
+
+  // 3. Delete from Express server
+  try {
+    fetch(`/api/observations/${id}`, {
+      method: 'DELETE',
+    }).catch(() => {});
+  } catch {
+    // ignore
   }
 
   return true;
@@ -237,16 +327,24 @@ export async function deleteObservation(id: string): Promise<boolean> {
  */
 export async function seedDevObservations(sampleData: Observation[]): Promise<boolean> {
   await saveLocalObservations(sampleData);
-  notifySync();
+  notifyAllListeners();
+
+  for (const item of sampleData) {
+    try {
+      await setDoc(doc(db, 'observations', item.id), item);
+    } catch {
+      // ignore
+    }
+  }
 
   try {
-    await fetch('/api/dev/seed', {
+    fetch('/api/dev/seed', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(sampleData),
-    });
-  } catch (err) {
-    console.warn('Seed via API failed, saved to local database:', err);
+    }).catch(() => {});
+  } catch {
+    // ignore
   }
 
   return true;
@@ -256,29 +354,47 @@ export async function seedDevObservations(sampleData: Observation[]): Promise<bo
  * 전체 데이터 초기화
  */
 export async function clearAllObservations(): Promise<boolean> {
+  const current = await getLocalObservations();
   await saveLocalObservations([]);
-  notifySync();
+  notifyAllListeners();
+
+  for (const item of current) {
+    try {
+      await deleteDoc(doc(db, 'observations', item.id));
+    } catch {
+      // ignore
+    }
+  }
 
   try {
-    await fetch('/api/dev/clear', { method: 'POST' });
-  } catch (err) {
-    console.warn('Clear via API failed:', err);
+    fetch('/api/dev/clear', { method: 'POST' }).catch(() => {});
+  } catch {
+    // ignore
   }
 
   return true;
 }
 
+/**
+ * UI 컴포넌트 실시간 동기화 구독
+ */
 export function subscribeToObservationsSync(callback: () => void): () => void {
-  if (!broadcastChannel) {
-    return () => {};
+  syncListeners.add(callback);
+
+  if (broadcastChannel) {
+    const handler = (event: MessageEvent) => {
+      if (event.data?.type === 'OBSERVATIONS_UPDATED') {
+        callback();
+      }
+    };
+    broadcastChannel.addEventListener('message', handler);
+    return () => {
+      syncListeners.delete(callback);
+      broadcastChannel?.removeEventListener('message', handler);
+    };
   }
-  const handler = (event: MessageEvent) => {
-    if (event.data?.type === 'OBSERVATIONS_UPDATED') {
-      callback();
-    }
-  };
-  broadcastChannel.addEventListener('message', handler);
+
   return () => {
-    broadcastChannel?.removeEventListener('message', handler);
+    syncListeners.delete(callback);
   };
 }
