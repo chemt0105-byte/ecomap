@@ -4,6 +4,18 @@ const CHANGELOG_CACHE_KEY = 'junghwa_changelog_cache';
 
 export const INITIAL_CHANGELOG: ChangelogItem[] = [
   {
+    id: 'v1.4.3',
+    version: 'v1.4.3',
+    date: '2026-11-03',
+    title: '교사 마스터 비밀번호 변경 오류 해결 및 클라우드(Firestore) 실시간 동기화',
+    changes: [
+      '교사 마스터 비밀번호 변경 시 Cloud Firestore에 즉각 영구 저장되어 모든 학생 스마트폰에 실시간 전파',
+      '비밀번호 변경 후에도 기존 초기 비밀번호(1234)로 계속 로그인이 허용되던 코드상 오류 완전 해결',
+      '비밀번호 변경 즉시 기존 1234 로그인이 전체 기기에서 전면 차단되며 새로 설정한 비밀번호로만 교사 모드 진입 가능',
+      '교사 인증 팝업에 클라우드 동기화 안내 및 실시간 보안 상태 시각화 추가',
+    ],
+  },
+  {
     id: 'v1.4.2',
     version: 'v1.4.2',
     date: '2026-11-02',

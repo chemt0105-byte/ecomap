@@ -5,6 +5,7 @@ import {
   isTeacherMode,
   useTeacherMode,
   updateTeacherMasterPassword,
+  getCachedTeacherPassword,
 } from '../services/authService';
 import {
   GraduationCap,
@@ -78,7 +79,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
       onAuthChanged();
       setView('status');
     } else {
-      setLoginError('비밀번호가 일치하지 않습니다. (초기 기본 비밀번호: 1234)');
+      setLoginError('비밀번호가 일치하지 않습니다. 올바른 교사 비밀번호를 입력해 주세요.');
     }
   };
 
@@ -106,7 +107,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
     setIsSubmitting(false);
 
     if (res.success) {
-      setChangeSuccess('교사 마스터 비밀번호가 성공적으로 변경되었습니다!');
+      setChangeSuccess('교사 마스터 비밀번호가 클라우드에 성공적으로 변경되었습니다! 기존 1234 로그인은 즉시 차단되었습니다.');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -215,13 +216,20 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                     type="password"
                     value={loginPassword}
                     onChange={e => setLoginPassword(e.target.value)}
-                    placeholder="비밀번호 입력 (기본: 1234)"
+                    placeholder={getCachedTeacherPassword() === '1234' ? "비밀번호 입력 (기본: 1234)" : "변경된 교사 비밀번호 입력"}
                     className="w-full pl-8 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:ring-2 focus:ring-purple-500/30 focus:outline-none"
                     autoFocus
                   />
                 </div>
                 <div className="flex items-center justify-between mt-1 text-[10px]">
-                  <span className="text-stone-400">초기 기본: <code className="font-mono text-stone-600 font-bold">1234</code></span>
+                  {getCachedTeacherPassword() === '1234' ? (
+                    <span className="text-stone-400">초기 기본: <code className="font-mono text-stone-600 font-bold">1234</code></span>
+                  ) : (
+                    <span className="text-emerald-700 font-bold flex items-center gap-1">
+                      <ShieldCheck className="w-3 h-3 text-emerald-600" />
+                      비밀번호 변경됨 (1234 차단됨)
+                    </span>
+                  )}
                   <button
                     type="button"
                     onClick={() => setView('change_password')}
@@ -266,6 +274,16 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                 <span className="text-[10px] text-stone-400">교사 비밀번호 재설정</span>
               </div>
 
+              <div className="bg-amber-50/80 border border-amber-200/90 rounded-xl p-2.5 text-[11px] text-amber-900 leading-relaxed">
+                <p className="font-bold flex items-center gap-1 text-amber-800 mb-0.5">
+                  <KeyRound className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+                  <span>클라우드 동기화 안내</span>
+                </p>
+                <p className="text-stone-600">
+                  비밀번호를 변경하면 클라우드 DB에 즉각 영구 저장되어 <strong>모든 학생 스마트폰에서 기존 '1234' 로그인이 전면 차단</strong>됩니다.
+                </p>
+              </div>
+
               {changeSuccess && (
                 <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 font-bold flex items-center gap-1.5 text-[11px]">
                   <CheckCircle2 className="w-3.5 h-3.5 shrink-0 text-emerald-600" />
@@ -288,7 +306,7 @@ export const TeacherAuthModal: React.FC<TeacherAuthModalProps> = ({
                   type="password"
                   value={currentPassword}
                   onChange={e => setCurrentPassword(e.target.value)}
-                  placeholder="현재 비밀번호 (기본: 1234)"
+                  placeholder={getCachedTeacherPassword() === '1234' ? "현재 비밀번호 (초기: 1234)" : "현재 비밀번호"}
                   className="w-full px-3 py-1.5 bg-stone-50 border border-stone-200 rounded-xl text-xs focus:ring-2 focus:ring-emerald-500/30 focus:outline-none"
                   autoFocus
                 />

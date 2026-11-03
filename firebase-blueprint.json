@@ -91,12 +91,31 @@
         }
       },
       "required": ["id", "speciesName", "category", "classId", "observerName", "createdAt"]
+    },
+    "TeacherSettings": {
+      "title": "TeacherSettings",
+      "description": "App settings including teacher master password",
+      "type": "object",
+      "properties": {
+        "teacherPassword": {
+          "type": "string",
+          "description": "Current teacher master password"
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Timestamp when password was updated"
+        }
+      }
     }
   },
   "firestore": {
     "/observations/{observationId}": {
       "schema": "Observation",
       "description": "Collection of ecological observations"
+    },
+    "/settings/{settingId}": {
+      "schema": "TeacherSettings",
+      "description": "App configuration and teacher security settings"
     }
   }
 }
