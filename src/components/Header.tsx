@@ -99,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-stone-900 border border-stone-200 transition-colors cursor-pointer"
             >
               <History className="w-3.5 h-3.5 text-stone-500" />
-              <span>v1.4.3</span>
+              <span>v1.4.4</span>
             </button>
 
             {/* 4. 교사 모드 버튼 */}

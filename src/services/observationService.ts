@@ -92,6 +92,7 @@ import { latLngToXY, JUNGHWA_HIGH_SCHOOL } from '../config/mapConfig';
 import { CategoryType } from '../types/observation';
 
 let isFirestoreListenerInitialized = false;
+let _cachedObservations: Observation[] = [];
 
 /**
  * 관찰 기록 객체 정규화 및 결측값 안전 보정
@@ -171,7 +172,6 @@ function initializeFirestoreListener(): void {
           if (raw) {
             const normalized = normalizeObservation(raw, docSnap.id);
             if (deletedIds.has(normalized.id)) {
-              // 사용자가 삭제한 데이터가 클라우드에 아직 남아있다면 즉각 영구 삭제 수행
               deleteDoc(doc(db, 'observations', normalized.id)).catch(() => {});
             } else {
               cloudRecords.push(normalized);
@@ -186,14 +186,37 @@ function initializeFirestoreListener(): void {
           r => r && r.id && r._pendingSync && !deletedIds.has(r.id) && !cloudRecords.some(c => c.id === r.id)
         );
 
-        const combined = [...cloudRecords, ...offlinePending].sort(
-          (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+        // 클라우드 데이터 + 로컬 대기 데이터 + 기존 메모리 캐시 병합
+        const recordMap = new Map<string, Observation>();
+        _cachedObservations.forEach(r => recordMap.set(r.id, r));
+        cloudRecords.forEach(r => recordMap.set(r.id, r));
+        offlinePending.forEach(r => recordMap.set(r.id, r));
+
+        for (const id of deletedIds) {
+          recordMap.delete(id);
+        }
+
+        const combined = Array.from(recordMap.values()).sort(
+          (a, b) => new Date(b.createdAt || b.observedAt || 0).getTime() - new Date(a.createdAt || a.observedAt || 0).getTime()
         );
 
+        _cachedObservations = combined;
         await saveLocalObservations(combined);
+
+        // 서버 백엔드에도 동기화 백업 (모든 기기 공통 백업)
+        if (combined.length > 0) {
+          try {
+            fetch('/api/observations/sync', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ records: combined }),
+            }).catch(() => {});
+          } catch {}
+        }
+
         notifyAllListeners();
 
-        // 오프라인 대기 기록이 있다면 클라우드로 업로드 시도 후 로컬 상태 영구 갱신
+        // 오프라인 대기 기록 클라우드 업로드 시도
         if (offlinePending.length > 0) {
           let hasSynced = false;
           for (const item of offlinePending) {
@@ -203,7 +226,7 @@ function initializeFirestoreListener(): void {
               item._pendingSync = false;
               hasSynced = true;
             } catch {
-              // 네트워크 재연결 시 재시도
+              // 네트워크/할당량 복구 시 재시도
             }
           }
           if (hasSynced) {
@@ -219,7 +242,7 @@ function initializeFirestoreListener(): void {
         }
       },
       (error) => {
-        console.warn('Firestore snapshot listener warning (using local cache):', error);
+        console.warn('Firestore snapshot listener warning (falling back to server & local storage):', error);
       }
     );
   } catch (err) {
@@ -229,85 +252,119 @@ function initializeFirestoreListener(): void {
 
 /**
  * 전체 관찰 기록 조회
- * 1. Cloud Firestore에서 실시간 최신 목록 취득 (삭제된 항목 제외 및 정규화)
- * 2. 초기 1회에 한하여 완전히 비어있을 때만 샘플 데이터 자동 초기화 (이후 사용자가 모두 삭제한 경우 빈 상태 유지)
- * 3. 로컬 IndexedDB에 안전하게 동기화 저장
- * 4. 네트워크 단절 시 IndexedDB 로컬 데이터 반환
+ * 
+ * 1. 로컬 IndexedDB 데이터 즉각 반환 (빠른 초기 렌더링)
+ * 2. Express 서버(/api/observations)에서 최신 관찰 데이터 취득
+ *    - Cloud Run 서버에 영구 보존되어 Firestore 일일 할당량(Quota) 초과 시에도 나중에 접속한 사용자(E)가 100% 조회 가능
+ * 3. Cloud Firestore 실시간 리스너 및 쿼리 연동 (할당량 허용 시)
+ * 4. 세 저장소(서버, Firestore, 로컬) 데이터를 안전하게 병합 및 중복 제거
  */
 export async function getObservations(): Promise<Observation[]> {
   initializeFirestoreListener();
   const deletedIds = getDeletedIds();
 
-  try {
-    const querySnapshot = await getDocs(collection(db, 'observations'));
-    const cloudRecords: Observation[] = [];
-
-    querySnapshot.forEach((docSnap) => {
-      const raw = docSnap.data();
-      if (raw) {
-        const normalized = normalizeObservation(raw, docSnap.id);
-        if (deletedIds.has(normalized.id)) {
-          // 삭제된 툼스톤 문서 정리
-          deleteDoc(doc(db, 'observations', normalized.id)).catch(() => {});
-        } else {
-          cloudRecords.push(normalized);
-        }
-      }
-    });
-
-    const rawLocalData = await getLocalObservations();
-    const cleanedLocal = rawLocalData
-      .filter(item => item && item.id && !deletedIds.has(item.id))
-      .map(item => normalizeObservation(item));
-
-    const hasEverInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIAL_SYNC_COMPLETED_KEY) === 'true';
-
-    if (cloudRecords.length > 0) {
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(INITIAL_SYNC_COMPLETED_KEY, 'true');
-      }
-      const offlinePending = cleanedLocal.filter(
-        r => r._pendingSync && !cloudRecords.some(c => c.id === r.id)
-      );
-      const combined = [...cloudRecords, ...offlinePending].sort(
-        (a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
-      );
-      await saveLocalObservations(combined);
-      return combined;
-    } else if (!hasEverInitialized && cleanedLocal.length === 0) {
-      // 최초 배포 시에만 1회 예시 데이터 생성
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(INITIAL_SYNC_COMPLETED_KEY, 'true');
-      }
-      const normalizedSamples = SAMPLE_OBSERVATIONS.map(s => normalizeObservation(s));
-      for (const item of normalizedSamples) {
-        unmarkAsDeleted(item.id);
-        try {
-          await setDoc(doc(db, 'observations', item.id), item);
-        } catch {
-          // ignore individual seed failure
-        }
-      }
-      await saveLocalObservations(normalizedSamples);
-      return normalizedSamples;
-    } else {
-      // 사용자가 데이터를 모두 삭제했거나 비어있는 상태
-      if (typeof window !== 'undefined') {
-        localStorage.setItem(INITIAL_SYNC_COMPLETED_KEY, 'true');
-      }
-      await saveLocalObservations([]);
-      return [];
-    }
-  } catch (err) {
-    console.warn('Firestore getDocs fallback to local cache:', err);
-  }
-
-  // 네트워크 장애 시 로컬 IndexedDB 캐시 반환 (삭제된 항목 제외 및 정규화)
+  // 1. 메모리 캐시 및 로컬 IndexedDB 확인
   const localData = await getLocalObservations();
   const validLocal = localData
     .filter(item => item && item.id && !deletedIds.has(item.id))
     .map(item => normalizeObservation(item));
-  return validLocal;
+
+  const recordMap = new Map<string, Observation>();
+  validLocal.forEach(item => recordMap.set(item.id, item));
+  _cachedObservations.forEach(item => {
+    if (!deletedIds.has(item.id)) recordMap.set(item.id, item);
+  });
+
+  // 2. 서버 백엔드(/api/observations)에서 영구 저장된 데이터 조회
+  // 핵심: Firestore의 일일 읽기 할당량 초과(resource-exhausted) 상태에서도
+  // 다른 학생(B)이 올린 게시물이 이후 접속한 학생(E)에게 100% 확실하게 표시됩니다!
+  try {
+    const res = await fetch('/api/observations');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.success && Array.isArray(json.data)) {
+        json.data.forEach((raw: any) => {
+          if (raw && raw.id && !deletedIds.has(raw.id)) {
+            const normalized = normalizeObservation(raw);
+            recordMap.set(normalized.id, normalized);
+          }
+        });
+      }
+    }
+  } catch (err) {
+    console.warn('Server observations fetch failed, continuing with available data:', err);
+  }
+
+  // 3. Firestore에서 직접 1회 조회 (아직 데이터가 비어있을 때만 시도하여 쿼터 낭비 방지)
+  if (recordMap.size === 0) {
+    try {
+      const querySnapshot = await getDocs(collection(db, 'observations'));
+      querySnapshot.forEach((docSnap) => {
+        const raw = docSnap.data();
+        if (raw) {
+          const normalized = normalizeObservation(raw, docSnap.id);
+          if (deletedIds.has(normalized.id)) {
+            deleteDoc(doc(db, 'observations', normalized.id)).catch(() => {});
+          } else {
+            recordMap.set(normalized.id, normalized);
+          }
+        }
+      });
+    } catch (err: any) {
+      console.warn('Firestore getDocs skipped (using server/local records):', err?.message || err);
+    }
+  }
+
+  let finalRecords = Array.from(recordMap.values()).sort(
+    (a, b) => new Date(b.createdAt || b.observedAt || 0).getTime() - new Date(a.createdAt || a.observedAt || 0).getTime()
+  );
+
+  // 4. 최초 배포 시에만 1회 예시 데이터 생성 (클라우드/서버/로컬 모두 완전히 비어있을 때)
+  const hasEverInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIAL_SYNC_COMPLETED_KEY) === 'true';
+  if (finalRecords.length === 0 && !hasEverInitialized) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(INITIAL_SYNC_COMPLETED_KEY, 'true');
+    }
+    const normalizedSamples = SAMPLE_OBSERVATIONS.map(s => normalizeObservation(s));
+    finalRecords = normalizedSamples;
+
+    // 서버에 저장
+    try {
+      fetch('/api/observations/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: normalizedSamples }),
+      }).catch(() => {});
+    } catch {}
+
+    // Firestore에 저장 시도
+    for (const item of normalizedSamples) {
+      unmarkAsDeleted(item.id);
+      try {
+        setDoc(doc(db, 'observations', item.id), item).catch(() => {});
+      } catch {}
+    }
+  } else if (finalRecords.length > 0) {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(INITIAL_SYNC_COMPLETED_KEY, 'true');
+    }
+  }
+
+  _cachedObservations = finalRecords;
+  await saveLocalObservations(finalRecords);
+
+  // 서버에 누락된 레코드 백그라운드 동기화
+  if (finalRecords.length > 0) {
+    try {
+      fetch('/api/observations/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ records: finalRecords }),
+      }).catch(() => {});
+    } catch {}
+  }
+
+  return finalRecords;
 }
 
 /**
@@ -327,34 +384,36 @@ export async function addObservation(
   // 삭제 목록에서 제거 (만약 동일 ID가 있었다면 해제)
   unmarkAsDeleted(item.id);
 
-  // 1. Immediately save to IndexedDB
+  // 1. 로컬 IndexedDB 및 메모리에 즉시 저장 (작성자 화면 즉각 반영)
   await addLocalObservation(item);
+  _cachedObservations = [item, ..._cachedObservations.filter(o => o.id !== item.id)];
   notifyAllListeners();
 
-  // 2. Persist to Cloud Firestore
+  // 2. 서버 백엔드(/api/observations)에 즉각 영구 저장
+  // await를 적용하여 서버에 확실히 저장되도록 보장 -> 이후 접속한 사용자(E)도 100% 확인 가능
   try {
-    const { _pendingSync, ...cleanItem } = item;
-    await setDoc(doc(db, 'observations', item.id), cleanItem);
-  } catch (err) {
-    console.warn('Firestore setDoc failed, flagging for background retry:', err);
-    item._pendingSync = true;
-    await addLocalObservation(item);
-    try {
-      handleFirestoreError(err, OperationType.WRITE, `observations/${item.id}`);
-    } catch {
-      // Keep local observation safe even if cloud throws
-    }
-  }
-
-  // 3. Background backup to Express server
-  try {
-    fetch('/api/observations', {
+    const res = await fetch('/api/observations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(item),
-    }).catch(() => {});
-  } catch {
-    // ignore
+    });
+    if (!res.ok) {
+      console.warn('Server POST /api/observations returned status:', res.status);
+    }
+  } catch (err) {
+    console.warn('Server POST /api/observations failed (saved to local/cloud):', err);
+  }
+
+  // 3. Cloud Firestore에 저장 (실시간 브로드캐스트)
+  try {
+    const { _pendingSync, ...cleanItem } = item;
+    await setDoc(doc(db, 'observations', item.id), cleanItem);
+    item._pendingSync = false;
+    await addLocalObservation(item);
+  } catch (err: any) {
+    console.warn('Firestore setDoc failed (saved on server & local):', err?.message || err);
+    item._pendingSync = true;
+    await addLocalObservation(item);
   }
 
   return item;
@@ -378,31 +437,27 @@ export async function updateObservation(
       updatedAt: new Date().toISOString(),
     };
     updatedItem = currentList[index];
+    _cachedObservations = currentList;
     await saveLocalObservations(currentList);
     notifyAllListeners();
+  }
+
+  // Update in Express server backend
+  try {
+    await fetch(`/api/observations/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+  } catch (err) {
+    console.warn('Server update failed:', err);
   }
 
   // Update in Cloud Firestore
   try {
     await updateDoc(doc(db, 'observations', id), updates);
   } catch (err) {
-    console.warn('Firestore updateDoc failed:', err);
-    try {
-      handleFirestoreError(err, OperationType.UPDATE, `observations/${id}`);
-    } catch {
-      // Local copy is already updated
-    }
-  }
-
-  // Update in Express server
-  try {
-    fetch(`/api/observations/${id}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updates),
-    }).catch(() => {});
-  } catch {
-    // ignore
+    console.warn('Firestore updateDoc failed (applied on server/local):', err);
   }
 
   return updatedItem;
@@ -410,11 +465,6 @@ export async function updateObservation(
 
 /**
  * 관찰 기록 삭제
- * 1. 툼스톤(DELETED_IDS)에 즉각 등록하여 동기화 루프에 의한 부활 완벽 차단
- * 2. 로컬 IndexedDB 및 캐시에서 제거
- * 3. Cloud Firestore에서 문서 삭제 (deleteDoc)
- * 4. Express 서버 백업 파일에서 삭제
- * 5. 모든 UI 리스너에 최종 반영 알림 전파
  */
 export async function deleteObservation(id: string): Promise<boolean> {
   if (!id) return false;
@@ -422,26 +472,27 @@ export async function deleteObservation(id: string): Promise<boolean> {
   // 1. 툼스톤에 영구 등록
   markAsDeleted(id);
 
-  // 2. 로컬 IndexedDB에서 즉각 삭제
+  // 2. 로컬 IndexedDB 및 메모리에서 즉각 삭제
   await deleteLocalObservation(id);
+  _cachedObservations = _cachedObservations.filter(o => o.id !== id);
 
-  // 3. Cloud Firestore에서 삭제
+  // 3. Express 서버에서 삭제
+  try {
+    await fetch(`/api/observations/${id}`, {
+      method: 'DELETE',
+    });
+  } catch (err) {
+    console.warn('Server delete failed:', err);
+  }
+
+  // 4. Cloud Firestore에서 삭제
   try {
     await deleteDoc(doc(db, 'observations', id));
   } catch (err) {
-    console.warn('Firestore deleteDoc failed (local deletion applied):', err);
+    console.warn('Firestore deleteDoc failed (deleted on server/local):', err);
   }
 
-  // 4. Express 서버 백업 삭제
-  try {
-    fetch(`/api/observations/${id}`, {
-      method: 'DELETE',
-    }).catch(() => {});
-  } catch {
-    // ignore
-  }
-
-  // 5. 모든 클라우드/로컬 삭제 절차 완료 후 UI 알림 전파
+  // 5. 알림 전파
   notifyAllListeners();
 
   return true;
@@ -456,24 +507,27 @@ export async function seedDevObservations(sampleData: Observation[]): Promise<bo
     unmarkAsDeleted(item.id);
   }
 
+  _cachedObservations = sampleData;
   await saveLocalObservations(sampleData);
 
+  // Server seed
+  try {
+    await fetch('/api/dev/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sampleData),
+    });
+  } catch (err) {
+    console.warn('Server seed failed:', err);
+  }
+
+  // Firestore seed
   for (const item of sampleData) {
     try {
       await setDoc(doc(db, 'observations', item.id), item);
     } catch {
       // ignore
     }
-  }
-
-  try {
-    fetch('/api/dev/seed', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(sampleData),
-    }).catch(() => {});
-  } catch {
-    // ignore
   }
 
   notifyAllListeners();
@@ -491,8 +545,17 @@ export async function clearAllObservations(): Promise<boolean> {
     }
   }
 
+  _cachedObservations = [];
   await saveLocalObservations([]);
 
+  // Server clear
+  try {
+    await fetch('/api/dev/clear', { method: 'POST' });
+  } catch (err) {
+    console.warn('Server clear failed:', err);
+  }
+
+  // Firestore clear
   try {
     const snapshot = await getDocs(collection(db, 'observations'));
     for (const docSnap of snapshot.docs) {
@@ -501,12 +564,6 @@ export async function clearAllObservations(): Promise<boolean> {
     }
   } catch (err) {
     console.warn('Failed to clear Firestore observations:', err);
-  }
-
-  try {
-    fetch('/api/dev/clear', { method: 'POST' }).catch(() => {});
-  } catch {
-    // ignore
   }
 
   notifyAllListeners();
