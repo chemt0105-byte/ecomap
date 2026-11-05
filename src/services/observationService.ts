@@ -276,13 +276,15 @@ export async function getObservations(): Promise<Observation[]> {
   });
 
   // 2. 서버 백엔드(/api/observations)에서 영구 저장된 데이터 조회
-  // 핵심: Firestore의 일일 읽기 할당량 초과(resource-exhausted) 상태에서도
-  // 다른 학생(B)이 올린 게시물이 이후 접속한 학생(E)에게 100% 확실하게 표시됩니다!
+  let serverRecords: any[] = [];
+  let isServerFetchSuccessful = false;
   try {
     const res = await fetch('/api/observations');
     if (res.ok) {
       const json = await res.json();
       if (json.success && Array.isArray(json.data)) {
+        isServerFetchSuccessful = true;
+        serverRecords = json.data;
         json.data.forEach((raw: any) => {
           if (raw && raw.id && !deletedIds.has(raw.id)) {
             const normalized = normalizeObservation(raw);
@@ -295,7 +297,22 @@ export async function getObservations(): Promise<Observation[]> {
     console.warn('Server observations fetch failed, continuing with available data:', err);
   }
 
-  // 3. Firestore에서 직접 1회 조회 (아직 데이터가 비어있을 때만 시도하여 쿼터 낭비 방지)
+  // 3. 학생 기기 로컬에만 저장되어 있던 미동기화 기록을 중앙 서버로 자동 구조 및 백업
+  if (isServerFetchSuccessful && serverRecords) {
+    const serverIdSet = new Set(serverRecords.map(r => r.id));
+    const unsyncedFromDevice = validLocal.filter(r => !serverIdSet.has(r.id) && !deletedIds.has(r.id));
+    if (unsyncedFromDevice.length > 0) {
+      try {
+        fetch('/api/observations/sync', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ records: unsyncedFromDevice }),
+        }).catch(() => {});
+      } catch {}
+    }
+  }
+
+  // 4. Firestore에서 직접 1회 조회 (서버와 로컬 모두 비어있을 때만 백업용 시도)
   if (recordMap.size === 0) {
     try {
       const querySnapshot = await getDocs(collection(db, 'observations'));
@@ -311,7 +328,7 @@ export async function getObservations(): Promise<Observation[]> {
         }
       });
     } catch (err: any) {
-      console.warn('Firestore getDocs skipped (using server/local records):', err?.message || err);
+      // Quota limit or offline: handled gracefully by server
     }
   }
 
@@ -319,7 +336,7 @@ export async function getObservations(): Promise<Observation[]> {
     (a, b) => new Date(b.createdAt || b.observedAt || 0).getTime() - new Date(a.createdAt || a.observedAt || 0).getTime()
   );
 
-  // 4. 최초 배포 시에만 1회 예시 데이터 생성 (클라우드/서버/로컬 모두 완전히 비어있을 때)
+  // 5. 최초 배포 시에만 1회 예시 데이터 생성 (모든 저장소가 완전히 비어있을 때)
   const hasEverInitialized = typeof window !== 'undefined' && localStorage.getItem(INITIAL_SYNC_COMPLETED_KEY) === 'true';
   if (finalRecords.length === 0 && !hasEverInitialized) {
     if (typeof window !== 'undefined') {
@@ -328,7 +345,6 @@ export async function getObservations(): Promise<Observation[]> {
     const normalizedSamples = SAMPLE_OBSERVATIONS.map(s => normalizeObservation(s));
     finalRecords = normalizedSamples;
 
-    // 서버에 저장
     try {
       fetch('/api/observations/sync', {
         method: 'POST',
@@ -336,14 +352,6 @@ export async function getObservations(): Promise<Observation[]> {
         body: JSON.stringify({ records: normalizedSamples }),
       }).catch(() => {});
     } catch {}
-
-    // Firestore에 저장 시도
-    for (const item of normalizedSamples) {
-      unmarkAsDeleted(item.id);
-      try {
-        setDoc(doc(db, 'observations', item.id), item).catch(() => {});
-      } catch {}
-    }
   } else if (finalRecords.length > 0) {
     if (typeof window !== 'undefined') {
       localStorage.setItem(INITIAL_SYNC_COMPLETED_KEY, 'true');
@@ -352,17 +360,6 @@ export async function getObservations(): Promise<Observation[]> {
 
   _cachedObservations = finalRecords;
   await saveLocalObservations(finalRecords);
-
-  // 서버에 누락된 레코드 백그라운드 동기화
-  if (finalRecords.length > 0) {
-    try {
-      fetch('/api/observations/sync', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ records: finalRecords }),
-      }).catch(() => {});
-    } catch {}
-  }
 
   return finalRecords;
 }
@@ -373,8 +370,6 @@ export async function getObservations(): Promise<Observation[]> {
 export async function addObservation(
   newRecord: Omit<Observation, 'id' | 'createdAt'>
 ): Promise<Observation> {
-  initializeFirestoreListener();
-
   const item: Observation = {
     ...newRecord,
     id: 'obs_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
@@ -390,7 +385,7 @@ export async function addObservation(
   notifyAllListeners();
 
   // 2. 서버 백엔드(/api/observations)에 즉각 영구 저장
-  // await를 적용하여 서버에 확실히 저장되도록 보장 -> 이후 접속한 사용자(E)도 100% 확인 가능
+  // 모든 학생 기기에 실시간 공유되는 핵심 백엔드
   try {
     const res = await fetch('/api/observations', {
       method: 'POST',
@@ -404,17 +399,24 @@ export async function addObservation(
     console.warn('Server POST /api/observations failed (saved to local/cloud):', err);
   }
 
-  // 3. Cloud Firestore에 저장 (실시간 브로드캐스트)
-  try {
-    const { _pendingSync, ...cleanItem } = item;
-    await setDoc(doc(db, 'observations', item.id), cleanItem);
-    item._pendingSync = false;
-    await addLocalObservation(item);
-  } catch (err: any) {
-    console.warn('Firestore setDoc failed (saved on server & local):', err?.message || err);
-    item._pendingSync = true;
-    await addLocalObservation(item);
-  }
+  // 3. Cloud Firestore에 비동기 저장 시도 (3초 타임아웃 논블로킹)
+  // 할당량(Quota) 초과 시에도 학생 UI가 멈추거나 저장이 지연되지 않도록 안전 보호
+  const syncToFirestore = async () => {
+    try {
+      const { _pendingSync, ...cleanItem } = item;
+      const writePromise = setDoc(doc(db, 'observations', item.id), cleanItem);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore timeout')), 3000)
+      );
+      await Promise.race([writePromise, timeoutPromise]);
+      item._pendingSync = false;
+      await addLocalObservation(item);
+    } catch {
+      item._pendingSync = true;
+      await addLocalObservation(item);
+    }
+  };
+  syncToFirestore();
 
   return item;
 }

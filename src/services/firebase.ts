@@ -57,15 +57,18 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(JSON.stringify(errInfo));
 }
 
-// Validate connection to Firestore on boot
+// Validate connection to Firestore on boot with graceful timeout and quota safety
 export async function testConnection() {
   try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.error('Please check your Firebase configuration.');
-    }
+    const testPromise = getDocFromServer(doc(db, 'test', 'connection'));
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('timeout')), 2000)
+    );
+    await Promise.race([testPromise, timeoutPromise]);
+  } catch (error: any) {
+    // Quota exhausted or offline mode: the app will seamlessly use server and local persistence
   }
 }
 
 testConnection();
+

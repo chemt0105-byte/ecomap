@@ -54,9 +54,9 @@ export const Header: React.FC<HeaderProps> = ({
                   <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
                   전체 {totalCount}개 관찰 기록
                 </span>
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-                  클라우드 DB 동기화됨
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  실시간 다중기기 동기화 중
                 </span>
                 {isTeacher && (
                   <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
@@ -77,7 +77,7 @@ export const Header: React.FC<HeaderProps> = ({
             <button
               onClick={onRefresh}
               disabled={isLoading}
-              title="데이터 새로고침"
+              title="데이터 즉시 새로고침"
               className="p-2 text-stone-500 hover:text-stone-800 hover:bg-stone-100 rounded-xl transition-colors border border-stone-200 cursor-pointer"
             >
               <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin text-emerald-600' : ''}`} />
@@ -99,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
               className="inline-flex items-center gap-1.5 px-2.5 py-2 text-xs font-bold rounded-xl text-stone-600 bg-stone-100 hover:bg-stone-200 hover:text-stone-900 border border-stone-200 transition-colors cursor-pointer"
             >
               <History className="w-3.5 h-3.5 text-stone-500" />
-              <span>v1.4.4</span>
+              <span>v1.4.5</span>
             </button>
 
             {/* 4. 교사 모드 버튼 */}

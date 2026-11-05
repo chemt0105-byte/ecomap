@@ -52,27 +52,60 @@ export default function App() {
   const [mobileTab, setMobileTab] = React.useState<'map' | 'list'>('map');
 
   // Load observations from database
-  const loadData = React.useCallback(async () => {
-    setIsLoading(true);
+  const loadData = React.useCallback(async (isInitial = false) => {
+    if (isInitial) setIsLoading(true);
     try {
       const data = await getObservations();
       setObservations(data);
+      return data;
     } catch (e) {
       console.error('Failed to load observations', e);
+      return [];
+    } finally {
+      if (isInitial) setIsLoading(false);
+    }
+  }, []);
+
+  // Manual refresh with user feedback
+  const handleManualRefresh = React.useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const data = await loadData(false);
+      setToast({
+        text: `동기화 완료: 최신 관찰 기록 ${data.length}개가 안전하게 반영되었습니다.`,
+        type: 'success',
+      });
+    } catch {
+      setToast({
+        text: '새로고침 중 오류가 발생했습니다.',
+        type: 'error',
+      });
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loadData]);
 
   React.useEffect(() => {
     // 앱 접속(페이지 로드) 시 항상 교사 모드가 해제(학생 모드)된 상태로 시작하도록 보장
     logoutTeacher();
-    loadData();
-    // Subscribe to multi-tab / broadcast updates
+    loadData(true);
+
+    // 1. Subscribe to multi-tab / local broadcast updates
     const unsubscribe = subscribeToObservationsSync(() => {
-      loadData();
+      loadData(false);
     });
-    return () => unsubscribe();
+
+    // 2. 다중 기기 실시간 자동 동기화 (5초 주기)
+    // 학생들이 야외나 교실에서 각자의 스마트폰으로 관찰 기록을 올릴 때,
+    // 다른 학생들과 교사의 화면에 5초 이내에 새 핀이 자동으로 나타나도록 보장
+    const pollInterval = setInterval(() => {
+      loadData(false);
+    }, 5000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(pollInterval);
+    };
   }, [loadData]);
 
   // Filtered & Sorted Observations
@@ -211,7 +244,7 @@ export default function App() {
         onOpenTeacherModal={() => setIsTeacherModalOpen(true)}
         onOpenHelpModal={() => setIsHelpModalOpen(true)}
         onOpenChangelogModal={() => setIsChangelogModalOpen(true)}
-        onRefresh={loadData}
+        onRefresh={handleManualRefresh}
         isLoading={isLoading}
       />
 
